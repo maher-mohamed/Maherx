@@ -247,12 +247,13 @@ export function useSocket() {
   }, [socket, room]);
 
   const leaveRoom = useCallback(() => {
-    clearSession();
-    if (socket) {
+    if (socket && room) {
+      // Tell the server first so it can transfer host ownership immediately.
+      socket.emit('LEAVE_ROOM');
       socket.disconnect();
-      socket.connect();
     }
-  }, [clearSession, socket]);
+    clearSession();
+  }, [clearSession, socket, room]);
 
   return {
     socket,
