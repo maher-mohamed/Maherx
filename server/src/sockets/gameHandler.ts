@@ -52,42 +52,6 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     io.to(roomCode).emit('SOUND_TRIGGER', { sound });
   };
 
-  // Helper for starting drawing turn intervals in Fake Artist
-  const startDrawingTurnTimer = (roomCode: string) => {
-    clearRoomTimer(roomCode);
-
-    const interval = setInterval(() => {
-      const room = roomController.getRoom(roomCode);
-      if (!room || !room.fakeArtistGame || room.fakeArtistGame.state !== 'DRAWING_TURNS') {
-        clearRoomTimer(roomCode);
-        return;
-      }
-
-      room.fakeArtistGame.turnTimeRemaining -= 1;
-
-      if (room.fakeArtistGame.turnTimeRemaining <= 3 && room.fakeArtistGame.turnTimeRemaining > 0) {
-        emitSound(room.code, 'TICK');
-      }
-
-      if (room.fakeArtistGame.turnTimeRemaining <= 0) {
-        // Advance to next turn
-        const finishedDrawing = FakeArtistEngine.advanceTurn(room);
-        if (finishedDrawing) {
-          clearRoomTimer(roomCode);
-          emitSound(room.code, 'BUZZ');
-          broadcastRoomState(room);
-        } else {
-          emitSound(room.code, 'POP');
-          broadcastRoomState(room);
-        }
-      } else {
-        broadcastRoomState(room);
-      }
-    }, 1000);
-
-    roomTimers.set(roomCode, interval);
-  };
-
   // 1. Create Room
   socket.on('CREATE_ROOM', (payload: CreateRoomPayload) => {
     try {
@@ -229,56 +193,12 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
 
     if (room.selectedGame === 'IMPOSTOR') {
       ImpostorEngine.initGame(room);
+      ImpostorEngine.startDiscussion(room);
       broadcastRoomState(room);
-
-      const assignmentTimer = setTimeout(() => {
-        const currentRoom = roomController.getRoom(room.code);
-        if (currentRoom && currentRoom.impostorGame && currentRoom.impostorGame.state === 'WORD_ASSIGNMENT') {
-          ImpostorEngine.startDiscussion(currentRoom);
-          broadcastRoomState(currentRoom);
-
-          const interval = setInterval(() => {
-            const r = roomController.getRoom(room.code);
-            if (!r || !r.impostorGame || r.impostorGame.state !== 'DISCUSSION') {
-              clearRoomTimer(room.code);
-              return;
-            }
-
-            r.impostorGame.discussionTimeRemaining -= 1;
-            if (r.impostorGame.discussionTimeRemaining <= 5 && r.impostorGame.discussionTimeRemaining > 0) {
-              emitSound(room.code, 'TICK');
-            }
-
-            if (r.impostorGame.discussionTimeRemaining <= 0) {
-              clearRoomTimer(room.code);
-              ImpostorEngine.startVoting(r);
-              emitSound(room.code, 'BUZZ');
-              broadcastRoomState(r);
-            } else {
-              broadcastRoomState(r);
-            }
-          }, 1000);
-
-          roomTimers.set(room.code, interval);
-        }
-      }, 6000);
-
-      roomTimers.set(room.code, assignmentTimer as any);
     } else if (room.selectedGame === 'FAKE_ARTIST') {
       FakeArtistEngine.initGame(room);
+      FakeArtistEngine.startDrawingTurns(room);
       broadcastRoomState(room);
-
-      // 6 seconds to view category & role, then start drawing turns
-      const assignmentTimer = setTimeout(() => {
-        const currentRoom = roomController.getRoom(room.code);
-        if (currentRoom && currentRoom.fakeArtistGame && currentRoom.fakeArtistGame.state === 'CATEGORY_AND_ROLE_ASSIGNMENT') {
-          FakeArtistEngine.startDrawingTurns(currentRoom);
-          broadcastRoomState(currentRoom);
-          startDrawingTurnTimer(currentRoom.code);
-        }
-      }, 6000);
-
-      roomTimers.set(room.code, assignmentTimer as any);
     }
   });
 
@@ -331,27 +251,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
         broadcastRoomState(room);
 
         if (movingToGuess) {
-          // Fake Artist gets 15s to guess the secret word
-          const guessInterval = setInterval(() => {
-            const r = roomController.getRoom(room.code);
-            if (!r || !r.fakeArtistGame || r.fakeArtistGame.state !== 'IMPOSTOR_GUESS') {
-              clearRoomTimer(room.code);
-              return;
-            }
-
-            r.fakeArtistGame.impostorGuessTimeRemaining = (r.fakeArtistGame.impostorGuessTimeRemaining || 15) - 1;
-            if (r.fakeArtistGame.impostorGuessTimeRemaining <= 0) {
-              clearRoomTimer(room.code);
-              // Automatic timeout fail
-              FakeArtistEngine.submitImpostorGuess(r, '');
-              emitSound(room.code, 'VICTORY');
-              broadcastRoomState(r);
-            } else {
-              broadcastRoomState(r);
-            }
-          }, 1000);
-
-          roomTimers.set(room.code, guessInterval);
+          broadcastRoomState(room);
         }
       }
     }
@@ -371,18 +271,27 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     broadcastRoomState(room);
   });
 
-  // 11. Early Skip to Voting (Host control)
-  socket.on('START_VOTING_EARLY', (payload: { roomCode: string }) => {
+  // 11. Manual round controls
+  socket.on('END_DRAWING_TURN', () => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player || !room.fakeArtistGame) return;
+    if (room.fakeArtistGame.state !== 'DRAWING_TURNS') return;
+    if (room.fakeArtistGame.currentTurnPlayerId !== player.id) return;
+
+    FakeArtistEngine.advanceTurn(room);
+    emitSound(room.code, 'POP');
+    broadcastRoomState(room);
+  });
+
+  socket.on('START_VOTING_EARLY', () => {
     const { room, player } = roomController.getPlayerBySocket(socket.id);
     if (!room || !player || room.hostId !== player.id) return;
 
     if (room.impostorGame && room.impostorGame.state === 'DISCUSSION') {
-      clearRoomTimer(room.code);
       ImpostorEngine.startVoting(room);
       emitSound(room.code, 'BUZZ');
       broadcastRoomState(room);
     } else if (room.fakeArtistGame && room.fakeArtistGame.state === 'DRAWING_TURNS') {
-      clearRoomTimer(room.code);
       room.fakeArtistGame.state = 'VOTING';
       room.fakeArtistGame.votes = {};
       emitSound(room.code, 'BUZZ');
@@ -399,53 +308,14 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
 
     if (room.selectedGame === 'IMPOSTOR') {
       ImpostorEngine.initGame(room);
+      ImpostorEngine.startDiscussion(room);
       emitSound(room.code, 'ROUND_START');
       broadcastRoomState(room);
-
-      const assignmentTimer = setTimeout(() => {
-        const currentRoom = roomController.getRoom(room.code);
-        if (currentRoom && currentRoom.impostorGame && currentRoom.impostorGame.state === 'WORD_ASSIGNMENT') {
-          ImpostorEngine.startDiscussion(currentRoom);
-          broadcastRoomState(currentRoom);
-
-          const interval = setInterval(() => {
-            const r = roomController.getRoom(room.code);
-            if (!r || !r.impostorGame || r.impostorGame.state !== 'DISCUSSION') {
-              clearRoomTimer(room.code);
-              return;
-            }
-
-            r.impostorGame.discussionTimeRemaining -= 1;
-            if (r.impostorGame.discussionTimeRemaining <= 0) {
-              clearRoomTimer(room.code);
-              ImpostorEngine.startVoting(r);
-              emitSound(room.code, 'BUZZ');
-              broadcastRoomState(r);
-            } else {
-              broadcastRoomState(r);
-            }
-          }, 1000);
-
-          roomTimers.set(room.code, interval);
-        }
-      }, 6000);
-
-      roomTimers.set(room.code, assignmentTimer as any);
     } else if (room.selectedGame === 'FAKE_ARTIST') {
       FakeArtistEngine.initGame(room);
+      FakeArtistEngine.startDrawingTurns(room);
       emitSound(room.code, 'ROUND_START');
       broadcastRoomState(room);
-
-      const assignmentTimer = setTimeout(() => {
-        const currentRoom = roomController.getRoom(room.code);
-        if (currentRoom && currentRoom.fakeArtistGame && currentRoom.fakeArtistGame.state === 'CATEGORY_AND_ROLE_ASSIGNMENT') {
-          FakeArtistEngine.startDrawingTurns(currentRoom);
-          broadcastRoomState(currentRoom);
-          startDrawingTurnTimer(currentRoom.code);
-        }
-      }, 6000);
-
-      roomTimers.set(room.code, assignmentTimer as any);
     }
   });
 
@@ -460,6 +330,21 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       broadcastRoomState(result.room);
     } else {
       socket.emit('ERROR', { message: result.error || 'تعذر العودة للوبي' });
+    }
+  });
+
+  // 14. Explicit Leave Room
+  socket.on('LEAVE_ROOM', (ack?: (response: { success: boolean }) => void) => {
+    const { room } = roomController.handleDisconnect(socket.id, true);
+
+    // Update every remaining player before confirming the leave.
+    if (room) {
+      broadcastRoomState(room);
+    }
+
+    // Let the client safely disconnect only after the server processed the leave.
+    if (ack) {
+      ack({ success: true });
     }
   });
 

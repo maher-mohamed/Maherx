@@ -155,7 +155,7 @@ export class RoomController {
     return { success: true, room, player };
   }
 
-  public handleDisconnect(socketId: string): { room?: Room; player?: Player; roomCode?: string } {
+  public handleDisconnect(socketId: string, removePlayer = false): { room?: Room; player?: Player; roomCode?: string } {
     const mapping = this.socketToPlayerMap.get(socketId);
     if (!mapping) return {};
 
@@ -178,6 +178,16 @@ export class RoomController {
           room.hostId = nextHost.id;
         }
       }
+
+      // An explicit "Leave Room" is permanent: remove the player from the room
+      // instead of keeping a disconnected player record for session reconnect.
+      if (removePlayer) {
+        delete room.players[playerId];
+      }
+    }
+
+    if (removePlayer && player) {
+      delete room.players[playerId];
     }
 
     this.socketToPlayerMap.delete(socketId);

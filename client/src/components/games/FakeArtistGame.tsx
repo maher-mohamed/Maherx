@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Clock,
   Sparkles,
   Palette,
   RotateCcw,
@@ -19,6 +18,7 @@ interface FakeArtistGameProps {
   room: Room;
   myPlayer: Player | null;
   onDrawStroke: (stroke: DrawStroke) => void;
+  onEndDrawingTurn: () => void;
   onCastVote: (targetPlayerId: string) => void;
   onSubmitImpostorGuess: (guessedWord: string) => void;
   onStartVotingEarly: () => void;
@@ -30,6 +30,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
   room,
   myPlayer,
   onDrawStroke,
+  onEndDrawingTurn,
   onCastVote,
   onSubmitImpostorGuess,
   onStartVotingEarly,
@@ -41,6 +42,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
   const [cardFlipped, setCardFlipped] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const [guessInput, setGuessInput] = useState('');
+  const [hasDrawnThisTurn, setHasDrawnThisTurn] = useState(false);
 
   if (!gameData) return null;
 
@@ -51,6 +53,17 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
   const currentTurnPlayer = room.players[gameData.currentTurnPlayerId];
   const votedCount = Object.keys(gameData.votes || {}).length;
   const hasVoted = myPlayer ? !!gameData.votes?.[myPlayer.id] || selectedVoteId !== null : false;
+
+  const handleDrawStroke = (stroke: DrawStroke) => {
+    setHasDrawnThisTurn(true);
+    onDrawStroke(stroke);
+  };
+
+  const handleEndDrawingTurn = () => {
+    if (!isMyTurn || !hasDrawnThisTurn) return;
+    setHasDrawnThisTurn(false);
+    onEndDrawingTurn();
+  };
 
   const handleVote = (targetId: string) => {
     if (gameData.state !== 'VOTING' || hasVoted) return;
@@ -87,7 +100,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
             </div>
             <p className="text-xs text-slate-400">
               {gameData.state === 'CATEGORY_AND_ROLE_ASSIGNMENT' && 'توزيع الأدوار وسر الكلمة'}
-              {gameData.state === 'DRAWING_TURNS' && `جولة الرسم (${gameData.currentRoundNumber} من 2)`}
+              {gameData.state === 'DRAWING_TURNS' && 'جولة الرسم — الأدوار مستمرة حتى ينهي الليدر'}
               {gameData.state === 'VOTING' && 'التصويت لكشف الرسام الفاشل'}
               {gameData.state === 'IMPOSTOR_GUESS' && 'فرصة الرسام الفاشل لتخمين الكلمة'}
               {gameData.state === 'RESULTS' && 'النتائج وتوزيع النقاط'}
@@ -95,25 +108,9 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
           </div>
         </div>
 
-        {/* Turn Timer for Drawing Turns */}
-        {gameData.state === 'DRAWING_TURNS' && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/40 border border-purple-500/30">
-            <Clock className={`w-5 h-5 ${gameData.turnTimeRemaining <= 3 ? 'text-rose-400 animate-bounce' : 'text-purple-400'}`} />
-            <span className={`text-xl font-mono font-black ${gameData.turnTimeRemaining <= 3 ? 'text-rose-400' : 'text-white'}`}>
-              00:{gameData.turnTimeRemaining.toString().padStart(2, '0')}
-            </span>
-          </div>
-        )}
-
-        {/* Guess Timer for Impostor Guess */}
-        {gameData.state === 'IMPOSTOR_GUESS' && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/40 border border-pink-500/30">
-            <Clock className="w-5 h-5 text-pink-400 animate-pulse" />
-            <span className="text-xl font-mono font-black text-pink-400">
-              00:{(gameData.impostorGuessTimeRemaining || 15).toString().padStart(2, '0')}
-            </span>
-          </div>
-        )}
+        <div className="px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-bold">
+          بدون مؤقت — كل مرحلة تنتهي يدويًا
+        </div>
       </div>
 
       {/* STATE 1: ROLE ASSIGNMENT */}
@@ -191,11 +188,6 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
               </div>
             </motion.div>
           </div>
-
-          <div className="flex items-center gap-2 text-xs text-slate-400 animate-pulse">
-            <Clock className="w-4 h-4" />
-            <span>سيبدأ دور الرسم الأول تلقائياً خلال لحظات...</span>
-          </div>
         </motion.div>
       )}
 
@@ -250,10 +242,6 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
                   </p>
                 </div>
               </div>
-
-              <div className="text-left font-mono font-black text-base text-purple-300">
-                00:{gameData.turnTimeRemaining.toString().padStart(2, '0')}
-              </div>
             </div>
           </div>
 
@@ -262,7 +250,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
             isMyTurn={isMyTurn}
             myColor={myColor}
             strokes={gameData.strokes || []}
-            onDrawStroke={onDrawStroke}
+            onDrawStroke={handleDrawStroke}
           />
 
           {/* Turn Order Timeline Carousel */}
@@ -294,17 +282,26 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
             })}
           </div>
 
-          {/* Host Skip Button */}
-          {isHost && (
-            <div className="flex justify-end pt-2">
+          {/* Manual turn + host round controls */}
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+            {isMyTurn && (
+              <button
+                onClick={handleEndDrawingTurn}
+                disabled={!hasDrawnThisTurn}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 disabled:from-slate-700 disabled:to-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-black shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+              >
+                {hasDrawnThisTurn ? 'خلصت رسمتي — الدور اللي بعدي ✏️' : 'ارسم خط الأول ✏️'}
+              </button>
+            )}
+            {isHost && (
               <button
                 onClick={onStartVotingEarly}
                 className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white text-xs font-black shadow-lg shadow-pink-600/20 transition-all active:scale-95"
               >
-                إنهاء الرسم والبدء بالتصويت فوراً ⚡
+                إنهاء الجولة والبدء بالتصويت ⚡
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </motion.div>
       )}
 
@@ -447,8 +444,6 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
                   الرسام الفاشل يحاول تخمين الكلمة السرية الآن...
                 </p>
                 <div className="flex items-center justify-center gap-2 text-xs text-pink-400 font-mono animate-pulse">
-                  <Clock className="w-4 h-4" />
-                  <span>الوقت المتبقي: 00:{(gameData.impostorGuessTimeRemaining || 15).toString().padStart(2, '0')}</span>
                 </div>
               </div>
             )}

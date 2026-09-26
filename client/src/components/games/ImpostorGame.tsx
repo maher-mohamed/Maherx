@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock,
   Vote,
   Sparkles,
   HelpCircle,
@@ -82,16 +81,9 @@ export const ImpostorGame: React.FC<ImpostorGameProps> = ({
             </p>
           </div>
         </div>
-
-        {/* Timer Badge (if discussion) */}
-        {gameData.state === 'DISCUSSION' && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/40 border border-indigo-500/30">
-            <Clock className={`w-5 h-5 ${gameData.discussionTimeRemaining <= 10 ? 'text-rose-400 animate-bounce' : 'text-indigo-400'}`} />
-            <span className={`text-xl font-mono font-black ${gameData.discussionTimeRemaining <= 10 ? 'text-rose-400' : 'text-white'}`}>
-              00:{gameData.discussionTimeRemaining.toString().padStart(2, '0')}
-            </span>
-          </div>
-        )}
+        <div className="px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-bold">
+          بدون مؤقت — المضيف ينهي النقاش عند الجاهزية
+        </div>
       </div>
 
       {/* STATE 1: WORD ASSIGNMENT */}
@@ -164,11 +156,6 @@ export const ImpostorGame: React.FC<ImpostorGameProps> = ({
                 )}
               </div>
             </motion.div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-slate-400 animate-pulse">
-            <Clock className="w-4 h-4" />
-            <span>سيبدأ وقت النقاش تلقائياً خلال لحظات...</span>
           </div>
         </motion.div>
       )}

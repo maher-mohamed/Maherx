@@ -66,19 +66,13 @@ export class FakeArtistEngine {
     game.turnIndex += 1;
 
     if (game.turnIndex >= game.turnOrder.length) {
-      if (game.currentRoundNumber === 1) {
-        // Start round 2
-        game.currentRoundNumber = 2;
-        game.turnIndex = 0;
-        game.currentTurnPlayerId = game.turnOrder[0];
-        game.turnTimeRemaining = 12;
-        return false; // Still drawing
-      } else {
-        // Both 2 rounds completed! Transition to voting
-        game.state = 'VOTING';
-        game.votes = {};
-        return true; // Finished drawing rounds
-      }
+      // A full turn order has finished. Start the same order again.
+      // Keep looping until the host manually ends the round.
+      game.currentRoundNumber += 1;
+      game.turnIndex = 0;
+      game.currentTurnPlayerId = game.turnOrder[0];
+      game.turnTimeRemaining = 0;
+      return false;
     } else {
       game.currentTurnPlayerId = game.turnOrder[game.turnIndex];
       game.turnTimeRemaining = 12;
