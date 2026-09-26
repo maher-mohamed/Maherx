@@ -186,6 +186,10 @@ export class RoomController {
       }
     }
 
+    if (removePlayer && player) {
+      delete room.players[playerId];
+    }
+
     this.socketToPlayerMap.delete(socketId);
     return { room, player, roomCode };
   }
