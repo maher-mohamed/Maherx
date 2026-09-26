@@ -335,7 +335,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
 
   // 14. Explicit Leave Room
   socket.on('LEAVE_ROOM', (ack?: (response: { success: boolean }) => void) => {
-    const { room } = roomController.handleDisconnect(socket.id);
+    const { room } = roomController.handleDisconnect(socket.id, true);
 
     // Update every remaining player before confirming the leave.
     if (room) {
