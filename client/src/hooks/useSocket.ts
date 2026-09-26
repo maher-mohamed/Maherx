@@ -194,9 +194,12 @@ export function useSocket() {
 
   const startVotingEarly = useCallback(() => {
     if (!socket || !room) return;
-    socket.emit('START_VOTING_EARLY', {
-      roomCode: room.code
-    });
+    socket.emit('START_VOTING_EARLY', { roomCode: room.code });
+  }, [socket, room]);
+
+  const endDrawingTurn = useCallback(() => {
+    if (!socket || !room) return;
+    socket.emit('END_DRAWING_TURN', { roomCode: room.code });
   }, [socket, room]);
 
   const sendDrawLine = useCallback(
@@ -248,9 +251,11 @@ export function useSocket() {
 
   const leaveRoom = useCallback(() => {
     if (socket && room) {
-      // Tell the server first so it can transfer host ownership immediately.
       socket.emit('LEAVE_ROOM');
+      clearSession();
       socket.disconnect();
+      socket.connect();
+      return;
     }
     clearSession();
   }, [clearSession, socket, room]);
@@ -270,6 +275,7 @@ export function useSocket() {
     kickPlayer,
     startGame,
     startVotingEarly,
+    endDrawingTurn,
     sendDrawLine,
     castVote,
     submitImpostorGuess,
