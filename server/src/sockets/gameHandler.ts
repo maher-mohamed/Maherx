@@ -194,6 +194,121 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     if (room.selectedGame === 'IMPOSTOR') {
       ImpostorEngine.initGame(room);
       ImpostorEngine.startDiscussion(room);
+      broadcastRoomState(room);
+    } else if (room.selectedGame === 'FAKE_ARTIST') {
+      FakeArtistEngine.initGame(room);
+      FakeArtistEngine.startDrawingTurns(room);
+      broadcastRoomState(room);
+    }
+  });
+
+  // 8. Real-time Canvas Drawing (draw_line / DRAW_LINE)
+  socket.on('DRAW_LINE', (payload: DrawLinePayload) => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player || !room.fakeArtistGame) return;
+
+    // Verify it is currently this player's turn to draw
+    if (room.fakeArtistGame.state !== 'DRAWING_TURNS') return;
+    if (room.fakeArtistGame.currentTurnPlayerId !== player.id) return;
+
+    // Use player's assigned color
+    const stroke = {
+      ...payload.stroke,
+      color: player.color || payload.stroke.color
+    };
+
+    FakeArtistEngine.addStroke(room, stroke);
+
+    // Broadcast stroke immediately to all room members
+    io.to(room.code).emit('LINE_DRAWN', { stroke });
+  });
+
+  // 9. Cast Vote (for Impostor or Fake Artist)
+  socket.on('CAST_VOTE', (payload: CastVotePayload) => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player) return;
+
+    if (room.selectedGame === 'IMPOSTOR' && room.impostorGame?.state === 'VOTING') {
+      const allVoted = ImpostorEngine.castVote(room, player.id, payload.targetPlayerId);
+      emitSound(room.code, 'VOTE_CAST');
+      broadcastRoomState(room);
+
+      if (allVoted) {
+        clearRoomTimer(room.code);
+        ImpostorEngine.evaluateVotes(room);
+        emitSound(room.code, 'REVEAL');
+        broadcastRoomState(room);
+      }
+    } else if (room.selectedGame === 'FAKE_ARTIST' && room.fakeArtistGame?.state === 'VOTING') {
+      const allVoted = FakeArtistEngine.castVote(room, player.id, payload.targetPlayerId);
+      emitSound(room.code, 'VOTE_CAST');
+      broadcastRoomState(room);
+
+      if (allVoted) {
+        clearRoomTimer(room.code);
+        const movingToGuess = FakeArtistEngine.evaluateVotes(room);
+        emitSound(room.code, 'REVEAL');
+        broadcastRoomState(room);
+
+        if (movingToGuess) {
+          broadcastRoomState(room);
+        }
+      }
+    }
+  });
+
+  // 10. Impostor Secret Word Guess (Fake Artist only)
+  socket.on('SUBMIT_IMPOSTOR_GUESS', (payload: ImpostorGuessPayload) => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player || !room.fakeArtistGame) return;
+
+    if (room.fakeArtistGame.state !== 'IMPOSTOR_GUESS') return;
+    if (room.fakeArtistGame.fakeArtistId !== player.id) return;
+
+    clearRoomTimer(room.code);
+    FakeArtistEngine.submitImpostorGuess(room, payload.guessedWord);
+    emitSound(room.code, 'VICTORY');
+    broadcastRoomState(room);
+  });
+
+  // 11. Manual round controls
+  socket.on('END_DRAWING_TURN', () => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player || !room.fakeArtistGame) return;
+    if (room.fakeArtistGame.state !== 'DRAWING_TURNS') return;
+    if (room.fakeArtistGame.currentTurnPlayerId !== player.id) return;
+
+    FakeArtistEngine.advanceTurn(room);
+    emitSound(room.code, 'POP');
+    broadcastRoomState(room);
+  });
+
+  socket.on('START_VOTING_EARLY', () => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player || room.hostId !== player.id) return;
+
+    if (room.impostorGame && room.impostorGame.state === 'DISCUSSION') {
+      ImpostorEngine.startVoting(room);
+      emitSound(room.code, 'BUZZ');
+      broadcastRoomState(room);
+    } else if (room.fakeArtistGame && room.fakeArtistGame.state === 'DRAWING_TURNS') {
+      room.fakeArtistGame.state = 'VOTING';
+      room.fakeArtistGame.votes = {};
+      emitSound(room.code, 'BUZZ');
+      broadcastRoomState(room);
+    }
+  });
+
+  // 12. Next Round
+  socket.on('NEXT_ROUND', (payload: NextRoundPayload) => {
+    const { room, player } = roomController.getPlayerBySocket(socket.id);
+    if (!room || !player || room.hostId !== player.id) return;
+
+    clearRoomTimer(room.code);
+
+    if (room.selectedGame === 'IMPOSTOR') {
+      ImpostorEngine.initGame(room);
+      ImpostorEngine.startDiscussion(room);
       emitSound(room.code, 'ROUND_START');
       broadcastRoomState(room);
     } else if (room.selectedGame === 'FAKE_ARTIST') {
@@ -218,7 +333,13 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  // 14. Explicit Leave Room\n  // Handle intentional exits before the socket disconnects so a new host is assigned immediately.\n  socket.on('LEAVE_ROOM', () => {\n    const { room } = roomController.handleDisconnect(socket.id);\n    if (room) {\n      broadcastRoomState(room);\n    }\n  });\n\n  // 14. Disconnect
+  // 14. Explicit Leave Room
+  socket.on('LEAVE_ROOM', () => {
+    const { room } = roomController.handleDisconnect(socket.id);
+    if (room) broadcastRoomState(room);
+  });
+
+  // 14. Disconnect
   socket.on('disconnect', () => {
     const { room } = roomController.handleDisconnect(socket.id);
     if (room) {
