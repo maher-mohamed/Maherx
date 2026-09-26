@@ -334,9 +334,18 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
   });
 
   // 14. Explicit Leave Room
-  socket.on('LEAVE_ROOM', () => {
+  socket.on('LEAVE_ROOM', (ack?: (response: { success: boolean }) => void) => {
     const { room } = roomController.handleDisconnect(socket.id);
-    if (room) broadcastRoomState(room);
+
+    // Update every remaining player before confirming the leave.
+    if (room) {
+      broadcastRoomState(room);
+    }
+
+    // Let the client safely disconnect only after the server processed the leave.
+    if (ack) {
+      ack({ success: true });
+    }
   });
 
   // 14. Disconnect
