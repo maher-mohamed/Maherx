@@ -251,10 +251,12 @@ export function useSocket() {
 
   const leaveRoom = useCallback(() => {
     if (socket && room) {
-      socket.emit('LEAVE_ROOM');
-      clearSession();
-      socket.disconnect();
-      socket.connect();
+      // Wait for the server to update the remaining players before reconnecting.
+      socket.emit('LEAVE_ROOM', () => {
+        clearSession();
+        socket.disconnect();
+        socket.connect();
+      });
       return;
     }
     clearSession();
