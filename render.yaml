@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: maherx
+    runtime: node
+    buildCommand: npm run install:all && npm run build
+    startCommand: npm run start:server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
