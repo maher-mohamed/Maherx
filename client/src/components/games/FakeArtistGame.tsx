@@ -42,6 +42,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
   const [cardFlipped, setCardFlipped] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const [guessInput, setGuessInput] = useState('');
+  const [hasDrawnThisTurn, setHasDrawnThisTurn] = useState(false);
 
   if (!gameData) return null;
 
@@ -52,6 +53,17 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
   const currentTurnPlayer = room.players[gameData.currentTurnPlayerId];
   const votedCount = Object.keys(gameData.votes || {}).length;
   const hasVoted = myPlayer ? !!gameData.votes?.[myPlayer.id] || selectedVoteId !== null : false;
+
+  const handleDrawStroke = (stroke: DrawStroke) => {
+    setHasDrawnThisTurn(true);
+    onDrawStroke(stroke);
+  };
+
+  const handleEndDrawingTurn = () => {
+    if (!isMyTurn || !hasDrawnThisTurn) return;
+    setHasDrawnThisTurn(false);
+    onEndDrawingTurn();
+  };
 
   const handleVote = (targetId: string) => {
     if (gameData.state !== 'VOTING' || hasVoted) return;
@@ -88,7 +100,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
             </div>
             <p className="text-xs text-slate-400">
               {gameData.state === 'CATEGORY_AND_ROLE_ASSIGNMENT' && 'توزيع الأدوار وسر الكلمة'}
-              {gameData.state === 'DRAWING_TURNS' && `جولة الرسم (${gameData.currentRoundNumber} من 2)`}
+              {gameData.state === 'DRAWING_TURNS' && 'جولة الرسم — الأدوار مستمرة حتى ينهي الليدر'}
               {gameData.state === 'VOTING' && 'التصويت لكشف الرسام الفاشل'}
               {gameData.state === 'IMPOSTOR_GUESS' && 'فرصة الرسام الفاشل لتخمين الكلمة'}
               {gameData.state === 'RESULTS' && 'النتائج وتوزيع النقاط'}
@@ -238,7 +250,7 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
             isMyTurn={isMyTurn}
             myColor={myColor}
             strokes={gameData.strokes || []}
-            onDrawStroke={onDrawStroke}
+            onDrawStroke={handleDrawStroke}
           />
 
           {/* Turn Order Timeline Carousel */}
@@ -274,10 +286,11 @@ export const FakeArtistGame: React.FC<FakeArtistGameProps> = ({
           <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
             {isMyTurn && (
               <button
-                onClick={onEndDrawingTurn}
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-black shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+                onClick={handleEndDrawingTurn}
+                disabled={!hasDrawnThisTurn}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 disabled:from-slate-700 disabled:to-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-black shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
               >
-                خلصت رسمتي — الدور اللي بعدي ✏️
+                {hasDrawnThisTurn ? 'خلصت رسمتي — الدور اللي بعدي ✏️' : 'ارسم خط الأول ✏️'}
               </button>
             )}
             {isHost && (
