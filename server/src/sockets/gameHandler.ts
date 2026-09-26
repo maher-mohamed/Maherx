@@ -463,7 +463,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  // 14. Disconnect
+  // 14. Explicit Leave Room\n  // Handle intentional exits before the socket disconnects so a new host is assigned immediately.\n  socket.on('LEAVE_ROOM', () => {\n    const { room } = roomController.handleDisconnect(socket.id);\n    if (room) {\n      broadcastRoomState(room);\n    }\n  });\n\n  // 14. Disconnect
   socket.on('disconnect', () => {
     const { room } = roomController.handleDisconnect(socket.id);
     if (room) {
