@@ -34,6 +34,7 @@ export const App: React.FC = () => {
     kickPlayer,
     startGame,
     startVotingEarly,
+    endDrawingTurn,
     sendDrawLine,
     castVote,
     submitImpostorGuess,
@@ -260,6 +261,7 @@ export const App: React.FC = () => {
                 room={room}
                 myPlayer={myPlayer}
                 onDrawStroke={sendDrawLine}
+                onEndDrawingTurn={endDrawingTurn}
                 onCastVote={castVote}
                 onSubmitImpostorGuess={submitImpostorGuess}
                 onStartVotingEarly={startVotingEarly}
